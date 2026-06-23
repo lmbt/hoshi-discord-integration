@@ -1,0 +1,17 @@
+{
+  "name": "hoshi-discord-integration",
+  "version": "1.0.0",
+  "description": "Pi coding agent extension for Discord DM integration with allowlisted users",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  },
+  "dependencies": {
+    "discord.js": "14.16.3"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  }
+}
