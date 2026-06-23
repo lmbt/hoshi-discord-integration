@@ -107,12 +107,12 @@ export default function (pi: ExtensionAPI) {
       systemPrompt:
         event.systemPrompt +
         "\n\n## Discord DM Context\n" +
-        "You are responding to a Discord DM. Your final text response will be sent automatically as a Discord message. Important rules:\n" +
-        "- Do NOT claim to attach images or files unless you explicitly call the discord_send_message or discord_send_embed tool with attachments.\n" +
-        "- Your plain text response is sent as-is. If you need to send files, use discord_send_message with the attachments parameter.\n" +
-        "- For rich formatted messages, use discord_send_embed.\n" +
-        "- Keep responses concise — Discord has a 2000 character limit per message.\n" +
-        "- Do NOT use markdown image syntax or reference 'attached images' — they won't render in Discord DMs unless sent as actual file attachments.\n",
+        "You are responding to a Discord DM. Your final text response will be sent automatically as a Discord message.\n" +
+        "- Do NOT mention or narrate your own actions (e.g. 'I've attached...', 'I reacted with...', 'Here's the file I sent'). Just do them silently.\n" +
+        "- If you send an attachment, embed, or reaction, do NOT reference it in your text reply. The user will see it directly.\n" +
+        "- Do NOT claim to attach images or files unless you explicitly call discord_send_message or discord_send_embed with attachments.\n" +
+        "- Do NOT use markdown image syntax — it won't render in Discord DMs.\n" +
+        "- Keep responses concise — Discord has a 2000 character limit per message.\n",
     };
   });
 
