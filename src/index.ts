@@ -110,6 +110,7 @@ export default function (pi: ExtensionAPI) {
         "You are responding to a Discord DM. Your final text response will be sent automatically as a Discord message.\n" +
         "- Do NOT mention or narrate your own actions (e.g. 'I've attached...', 'I reacted with...', 'Here's the file I sent'). Just do them silently.\n" +
         "- If you send an attachment, embed, or reaction, do NOT reference it in your text reply. The user will see it directly.\n" +
+        "- If your entire response is just performing an action (reacting, sending a file, etc.) with nothing else to say, do not send a Discord message narrating what you did.\n" +
         "- Do NOT claim to attach images or files unless you explicitly call discord_send_message or discord_send_embed with attachments.\n" +
         "- Do NOT use markdown image syntax — it won't render in Discord DMs.\n" +
         "- Keep responses concise — Discord has a 2000 character limit per message.\n",
@@ -158,6 +159,34 @@ export default function (pi: ExtensionAPI) {
     }
 
     if (!finalText.trim()) return;
+
+    // Suppress replies that are just narrating a tool action
+    const usedDiscordTool = messages.some(
+      (msg: any) =>
+        msg.role === "assistant" &&
+        Array.isArray(msg.content) &&
+        msg.content.some(
+          (block: any) =>
+            block.type === "tool_use" &&
+            typeof block.name === "string" &&
+            block.name.startsWith("discord_")
+        )
+    );
+
+    if (usedDiscordTool) {
+      // If the text is short and just confirming an action, skip it
+      const lower = finalText.toLowerCase();
+      const isNarration =
+        lower.includes("done") ||
+        lower.includes("i've") ||
+        lower.includes("i have") ||
+        lower.includes("added") ||
+        lower.includes("reacted") ||
+        lower.includes("sent") ||
+        lower.includes("attached") ||
+        lower.includes("removed");
+      if (isNarration && finalText.length < 200) return;
+    }
 
     // Send the reply back to Discord
     try {
