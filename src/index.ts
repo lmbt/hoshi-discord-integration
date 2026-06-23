@@ -98,6 +98,24 @@ export default function (pi: ExtensionAPI) {
     return true;
   }
 
+  // --- Inject instructions when responding to Discord DMs ---
+
+  pi.on("before_agent_start", async (event, ctx) => {
+    if (!activeReply) return;
+
+    return {
+      systemPrompt:
+        event.systemPrompt +
+        "\n\n## Discord DM Context\n" +
+        "You are responding to a Discord DM. Your final text response will be sent automatically as a Discord message. Important rules:\n" +
+        "- Do NOT claim to attach images or files unless you explicitly call the discord_send_message or discord_send_embed tool with attachments.\n" +
+        "- Your plain text response is sent as-is. If you need to send files, use discord_send_message with the attachments parameter.\n" +
+        "- For rich formatted messages, use discord_send_embed.\n" +
+        "- Keep responses concise — Discord has a 2000 character limit per message.\n" +
+        "- Do NOT use markdown image syntax or reference 'attached images' — they won't render in Discord DMs unless sent as actual file attachments.\n",
+    };
+  });
+
   // --- Auto-reply: capture final assistant output and send to Discord ---
 
   pi.on("agent_end", async (event, ctx) => {
