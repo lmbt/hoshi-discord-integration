@@ -357,18 +357,29 @@ export default function (pi: ExtensionAPI) {
       const response = await fetch(params.url);
       if (!response.ok) {
         throw new Error(
-          `Failed to download attachment: ${response.status} ${response.statusText}`
+          `Failed to download attachment: ${response.status} ${response.statusText} (URL may have expired)`
         );
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length === 0) {
+        throw new Error("Downloaded file is empty — the attachment URL may have expired.");
+      }
+
       await writeFile(savePath, buffer);
+
+      // Verify the file was actually written
+      const { stat } = await import("node:fs/promises");
+      const fileStat = await stat(savePath).catch(() => null);
+      if (!fileStat || fileStat.size === 0) {
+        throw new Error(`File write failed — expected ${buffer.length} bytes at ${savePath}`);
+      }
 
       return {
         content: [
           {
             type: "text",
-            text: `Downloaded attachment to ${params.save_path} (${buffer.length} bytes)`,
+            text: `Downloaded attachment to ${savePath} (${buffer.length} bytes)`,
           },
         ],
         details: { path: savePath, size: buffer.length },
