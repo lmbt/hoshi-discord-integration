@@ -30,11 +30,17 @@ export DISCORD_ALLOWED_USER_IDS="123456789012345678,987654321098765432"
 
 # Optional: directory for downloaded attachments (defaults to cwd)
 export DISCORD_ATTACHMENT_DIR="/home/user/discord-attachments"
+
+# Optional: control what gets stripped from Discord replies (default: true)
+export DISCORD_STRIP_REASONING="true"
+export DISCORD_STRIP_TOOLS="true"
 ```
 
 - `DISCORD_BOT_TOKEN` — your bot's token from the Discord developer portal
 - `DISCORD_ALLOWED_USER_IDS` — comma-separated list of Discord user IDs that can interact with the bot
 - `DISCORD_ATTACHMENT_DIR` — base directory for saving downloaded attachments (optional, defaults to project cwd)
+- `DISCORD_STRIP_REASONING` — strip `<think>` blocks and reasoning from replies (default: `true`)
+- `DISCORD_STRIP_TOOLS` — strip tool call output from replies (default: `true`)
 
 ## Tools
 

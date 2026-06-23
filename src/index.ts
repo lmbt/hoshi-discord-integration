@@ -24,6 +24,8 @@ export default function (pi: ExtensionAPI) {
   let botToken = "";
   let allowedUserIds: string[] = [];
   let attachmentDir = "";
+  let stripReasoning = true;
+  let stripTools = true;
 
   // Track which Discord conversation triggered the current agent turn
   let activeReply: ActiveReply | null = null;
@@ -46,6 +48,9 @@ export default function (pi: ExtensionAPI) {
     if (allowedUserIds.length === 0) return false;
 
     attachmentDir = process.env.DISCORD_ATTACHMENT_DIR ?? "";
+
+    stripReasoning = (process.env.DISCORD_STRIP_REASONING ?? "true").toLowerCase() !== "false";
+    stripTools = (process.env.DISCORD_STRIP_TOOLS ?? "true").toLowerCase() !== "false";
 
     return true;
   }
@@ -101,7 +106,7 @@ export default function (pi: ExtensionAPI) {
     activeReply = null;
 
     // Extract the final assistant text from the turn's messages.
-    // We want only the text content blocks — no tool calls, no thinking.
+    // We want ONLY clean text — no tool calls, no thinking blocks, no reasoning.
     const messages = event.messages ?? [];
     let finalText = "";
 
@@ -110,11 +115,22 @@ export default function (pi: ExtensionAPI) {
 
       // msg.content can be a string or array of content blocks
       if (typeof msg.content === "string") {
-        finalText = msg.content;
+        finalText = stripReasoning ? stripThinking(msg.content) : msg.content;
       } else if (Array.isArray(msg.content)) {
         const textParts = msg.content
-          .filter((block: any) => block.type === "text")
-          .map((block: any) => block.text)
+          .filter((block: any) => {
+            if (block.type === "text") return true;
+            if (!stripTools && block.type === "tool_use") return true;
+            return false;
+          })
+          .map((block: any) => {
+            if (block.type === "text") {
+              return stripReasoning ? stripThinking(block.text) : block.text;
+            }
+            // tool_use block (only reached if stripTools is false)
+            return `[Tool: ${block.name}]\n${JSON.stringify(block.input, null, 2)}`;
+          })
+          .filter(Boolean)
           .join("\n");
         if (textParts) {
           finalText = textParts;
@@ -158,6 +174,16 @@ export default function (pi: ExtensionAPI) {
       remaining = remaining.slice(splitIdx).replace(/^\n/, "");
     }
     return chunks;
+  }
+
+  function stripThinking(text: string): string {
+    // Remove <think>...</think> blocks (including multiline)
+    let cleaned = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "");
+    // Remove unclosed <think> tags (model started thinking but didn't close)
+    cleaned = cleaned.replace(/<think>[\s\S]*/g, "");
+    // Remove </think> prefix if response starts after a thinking block
+    cleaned = cleaned.replace(/^[\s]*<\/think>\s*/g, "");
+    return cleaned.trim();
   }
 
   // --- Session lifecycle ---
