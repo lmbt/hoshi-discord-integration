@@ -351,6 +351,77 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerTool({
+    name: "discord_unreact",
+    label: "Discord Unreact",
+    description:
+      "Remove the bot's reaction from a Discord message. Provide either a channel_id or user_id to resolve the DM channel.",
+    promptSnippet: "Remove a reaction from a Discord DM message",
+    promptGuidelines: [
+      "Use discord_unreact to remove the bot's own emoji reaction from a message.",
+    ],
+    parameters: Type.Object({
+      user_id: Type.Optional(
+        Type.String({ description: "Discord user ID (used to resolve the DM channel if channel_id is not provided)" })
+      ),
+      channel_id: Type.Optional(
+        Type.String({ description: "DM channel ID where the message is" })
+      ),
+      message_id: Type.String({ description: "Message ID to remove the reaction from" }),
+      emoji: Type.String({
+        description: "Emoji to remove (unicode emoji like 👍 or custom emoji name)",
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (!(await ensureConnected(ctx.cwd))) {
+        throw new Error(
+          "Discord not connected. Ensure DISCORD_BOT_TOKEN and DISCORD_ALLOWED_USER_IDS are set."
+        );
+      }
+
+      if (!params.channel_id && !params.user_id) {
+        throw new Error("Must provide either channel_id or user_id.");
+      }
+
+      let dmChannel: DMChannel;
+
+      if (params.channel_id) {
+        const channel = await client!.channels.fetch(params.channel_id);
+        if (!channel || !channel.isDMBased()) {
+          throw new Error(`Channel ${params.channel_id} is not a valid DM channel.`);
+        }
+        dmChannel = channel as DMChannel;
+      } else {
+        if (!isAllowed(params.user_id!)) {
+          throw new Error(`User ${params.user_id} is not in the allowed user list.`);
+        }
+        const user = await client!.users.fetch(params.user_id!);
+        dmChannel = await user.createDM();
+      }
+
+      const message = await dmChannel.messages.fetch(params.message_id);
+      const reaction = message.reactions.cache.find(
+        (r) => r.emoji.name === params.emoji || r.emoji.toString() === params.emoji
+      );
+
+      if (!reaction) {
+        throw new Error(`No reaction ${params.emoji} found on message ${params.message_id}.`);
+      }
+
+      await reaction.users.remove(client!.user!.id);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Removed reaction ${params.emoji} from message ${params.message_id}`,
+          },
+        ],
+        details: { messageId: params.message_id, emoji: params.emoji },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "discord_download_attachment",
     label: "Discord Download Attachment",
     description: "Download an attachment from a Discord message to a local file path.",
