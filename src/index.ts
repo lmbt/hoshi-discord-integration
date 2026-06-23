@@ -181,8 +181,8 @@ export default function (pi: ExtensionAPI) {
     let cleaned = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "");
     // Remove unclosed <think> tags (model started thinking but didn't close)
     cleaned = cleaned.replace(/<think>[\s\S]*/g, "");
-    // Remove </think> prefix if response starts after a thinking block
-    cleaned = cleaned.replace(/^[\s]*<\/think>\s*/g, "");
+    // Remove everything before </think> (reasoning without opening tag)
+    cleaned = cleaned.replace(/^[\s\S]*?<\/think>\s*/g, "");
     return cleaned.trim();
   }
 
