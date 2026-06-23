@@ -87,7 +87,7 @@ export default function (pi: ExtensionAPI) {
           ? `\n[Attachments: ${message.attachments.map((a) => `${a.name} (${a.url})`).join(", ")}]`
           : "";
 
-      const prompt = `[Discord DM from ${message.author.tag} (${message.author.id})]: ${message.content}${attachmentInfo}`;
+      const prompt = `[Discord DM from ${message.author.tag} (user_id: ${message.author.id}, channel_id: ${message.channel.id}, message_id: ${message.id})]: ${message.content}${attachmentInfo}`;
 
       // Inject as a user message so the agent processes it immediately
       pi.sendUserMessage(prompt, { deliverAs: "followUp" });
@@ -291,13 +291,18 @@ export default function (pi: ExtensionAPI) {
     name: "discord_react",
     label: "Discord React",
     description:
-      "React to a Discord message with an emoji. The message must be in a DM with an allowed user.",
+      "React to a Discord message with an emoji. Provide either a channel_id or user_id (to look up the DM channel).",
     promptSnippet: "React to a Discord DM message with an emoji",
     promptGuidelines: [
-      "Use discord_react to add an emoji reaction to a specific Discord message by its ID.",
+      "Use discord_react to add an emoji reaction to a specific Discord message by its ID. You can use the channel_id from the incoming message metadata, or just provide the user_id and the DM channel will be resolved automatically.",
     ],
     parameters: Type.Object({
-      channel_id: Type.String({ description: "DM channel ID where the message is" }),
+      user_id: Type.Optional(
+        Type.String({ description: "Discord user ID (used to resolve the DM channel if channel_id is not provided)" })
+      ),
+      channel_id: Type.Optional(
+        Type.String({ description: "DM channel ID where the message is" })
+      ),
       message_id: Type.String({ description: "Message ID to react to" }),
       emoji: Type.String({
         description: "Emoji to react with (unicode emoji like 👍 or custom emoji name)",
@@ -310,12 +315,26 @@ export default function (pi: ExtensionAPI) {
         );
       }
 
-      const channel = await client!.channels.fetch(params.channel_id);
-      if (!channel || !channel.isDMBased()) {
-        throw new Error(`Channel ${params.channel_id} is not a valid DM channel.`);
+      if (!params.channel_id && !params.user_id) {
+        throw new Error("Must provide either channel_id or user_id.");
       }
 
-      const dmChannel = channel as DMChannel;
+      let dmChannel: DMChannel;
+
+      if (params.channel_id) {
+        const channel = await client!.channels.fetch(params.channel_id);
+        if (!channel || !channel.isDMBased()) {
+          throw new Error(`Channel ${params.channel_id} is not a valid DM channel.`);
+        }
+        dmChannel = channel as DMChannel;
+      } else {
+        if (!isAllowed(params.user_id!)) {
+          throw new Error(`User ${params.user_id} is not in the allowed user list.`);
+        }
+        const user = await client!.users.fetch(params.user_id!);
+        dmChannel = await user.createDM();
+      }
+
       const message = await dmChannel.messages.fetch(params.message_id);
       await message.react(params.emoji);
 
