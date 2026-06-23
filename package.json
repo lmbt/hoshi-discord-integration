@@ -7,7 +7,7 @@
     "extensions": ["./src/index.ts"]
   },
   "dependencies": {
-    "discord.js": "14.16.3"
+    "discord.js": "14.25.1"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
