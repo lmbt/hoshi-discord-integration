@@ -47,6 +47,7 @@ export DISCORD_STRIP_TOOLS="true"
 | Tool | Description |
 |------|-------------|
 | `discord_send_message` | Send a DM with text and/or file attachments |
+| `discord_send_embed` | Send a rich embed (with optional attachments) — supports title, fields, images, color, footer |
 | `discord_react` | React to a message with an emoji |
 | `discord_download_attachment` | Download a received attachment to a local file |
 | `discord_list_users` | List allowed users and their status |

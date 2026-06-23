@@ -7,6 +7,7 @@ import {
   type Message,
   type DMChannel,
   AttachmentBuilder,
+  EmbedBuilder,
 } from "discord.js";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve, basename, dirname } from "node:path";
@@ -388,6 +389,101 @@ export default function (pi: ExtensionAPI) {
       return {
         content: [{ type: "text", text: formatted || "No allowed users configured." }],
         details: { users },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "discord_send_embed",
+    label: "Discord Send Embed",
+    description:
+      "Send a rich embed message (with optional file attachments) to an allowed Discord user via DM. Supports title, description, color, fields, images, thumbnails, and footer.",
+    promptSnippet: "Send a rich embed (with optional attachments) to a Discord user",
+    promptGuidelines: [
+      "Use discord_send_embed to send visually rich messages with structured fields, images, or formatted content to a Discord user.",
+    ],
+    parameters: Type.Object({
+      user_id: Type.String({ description: "Discord user ID to send to" }),
+      title: Type.Optional(Type.String({ description: "Embed title" })),
+      description: Type.Optional(Type.String({ description: "Embed description/body text" })),
+      url: Type.Optional(Type.String({ description: "URL the title links to" })),
+      color: Type.Optional(
+        Type.Number({ description: "Embed color as decimal integer (e.g. 0x00ff00 = 65280)" })
+      ),
+      fields: Type.Optional(
+        Type.Array(
+          Type.Object({
+            name: Type.String({ description: "Field name" }),
+            value: Type.String({ description: "Field value" }),
+            inline: Type.Optional(Type.Boolean({ description: "Display inline" })),
+          }),
+          { description: "Embed fields" }
+        )
+      ),
+      thumbnail_url: Type.Optional(Type.String({ description: "Thumbnail image URL" })),
+      image_url: Type.Optional(Type.String({ description: "Large image URL" })),
+      footer: Type.Optional(Type.String({ description: "Footer text" })),
+      content: Type.Optional(
+        Type.String({ description: "Plain text content sent alongside the embed" })
+      ),
+      attachments: Type.Optional(
+        Type.Array(
+          Type.Object({
+            path: Type.String({ description: "Local file path to attach" }),
+            name: Type.Optional(Type.String({ description: "Override filename" })),
+          }),
+          { description: "File attachments to include with the message" }
+        )
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (!(await ensureConnected(ctx.cwd))) {
+        throw new Error(
+          "Discord not connected. Ensure DISCORD_BOT_TOKEN and DISCORD_ALLOWED_USER_IDS are set."
+        );
+      }
+
+      if (!isAllowed(params.user_id)) {
+        throw new Error(`User ${params.user_id} is not in the allowed user list.`);
+      }
+
+      const user = await client!.users.fetch(params.user_id);
+      const dm = await user.createDM();
+
+      const embed = new EmbedBuilder();
+      if (params.title) embed.setTitle(params.title);
+      if (params.description) embed.setDescription(params.description);
+      if (params.url) embed.setURL(params.url);
+      if (params.color !== undefined) embed.setColor(params.color);
+      if (params.fields) {
+        for (const field of params.fields) {
+          embed.addFields({ name: field.name, value: field.value, inline: field.inline });
+        }
+      }
+      if (params.thumbnail_url) embed.setThumbnail(params.thumbnail_url);
+      if (params.image_url) embed.setImage(params.image_url);
+      if (params.footer) embed.setFooter({ text: params.footer });
+
+      const files: AttachmentBuilder[] = [];
+      if (params.attachments) {
+        for (const att of params.attachments) {
+          const filePath = resolve(ctx.cwd, att.path);
+          const data = await readFile(filePath);
+          files.push(new AttachmentBuilder(data, { name: att.name ?? basename(filePath) }));
+        }
+      }
+
+      const sent = await dm.send({
+        content: params.content ?? undefined,
+        embeds: [embed],
+        files,
+      });
+
+      return {
+        content: [
+          { type: "text", text: `Embed sent to ${user.tag} (ID: ${sent.id})` },
+        ],
+        details: { messageId: sent.id, channelId: dm.id },
       };
     },
   });
