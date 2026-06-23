@@ -31,6 +31,9 @@ export default function (pi: ExtensionAPI) {
   // Track which Discord conversation triggered the current agent turn
   let activeReply: ActiveReply | null = null;
 
+  // Typing indicator interval
+  let typingInterval: ReturnType<typeof setInterval> | null = null;
+
   // --- Helpers ---
 
   function isAllowed(userId: string): boolean {
@@ -93,6 +96,33 @@ export default function (pi: ExtensionAPI) {
       pi.sendUserMessage(prompt, { deliverAs: "followUp" });
     });
 
+    // Auto-reconnect on disconnect
+    client.on("error", () => {
+      connected = false;
+    });
+
+    client.on("shardDisconnect", () => {
+      connected = false;
+      // Attempt reconnect after 5 seconds
+      setTimeout(() => {
+        if (!connected && client) {
+          client.login(botToken).then(() => {
+            connected = true;
+          }).catch(() => {
+            connected = false;
+          });
+        }
+      }, 5000);
+    });
+
+    client.on("shardReconnecting", () => {
+      connected = false;
+    });
+
+    client.on("shardReady", () => {
+      connected = true;
+    });
+
     await client.login(botToken);
     connected = true;
     return true;
@@ -102,6 +132,23 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("before_agent_start", async (event, ctx) => {
     if (!activeReply) return;
+
+    // Start typing indicator in the DM channel
+    if (client && connected) {
+      try {
+        const channel = await client.channels.fetch(activeReply.channelId);
+        if (channel && channel.isDMBased()) {
+          const dmChannel = channel as DMChannel;
+          await dmChannel.sendTyping();
+          // Discord typing indicator lasts ~10s, refresh every 8s
+          typingInterval = setInterval(async () => {
+            try {
+              await dmChannel.sendTyping();
+            } catch {}
+          }, 8000);
+        }
+      } catch {}
+    }
 
     return {
       systemPrompt:
@@ -120,6 +167,12 @@ export default function (pi: ExtensionAPI) {
   // --- Auto-reply: capture final assistant output and send to Discord ---
 
   pi.on("agent_end", async (event, ctx) => {
+    // Stop typing indicator
+    if (typingInterval) {
+      clearInterval(typingInterval);
+      typingInterval = null;
+    }
+
     if (!activeReply || !client || !connected) return;
 
     const reply = activeReply;
@@ -512,6 +565,70 @@ export default function (pi: ExtensionAPI) {
       return {
         content: [{ type: "text", text: formatted || "No allowed users configured." }],
         details: { users },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "discord_message_history",
+    label: "Discord Message History",
+    description:
+      "Fetch recent DM history with an allowed Discord user. Returns messages in chronological order.",
+    promptSnippet: "Fetch recent DM history with a Discord user",
+    promptGuidelines: [
+      "Use discord_message_history to retrieve earlier messages from a DM conversation for context.",
+    ],
+    parameters: Type.Object({
+      user_id: Type.String({ description: "Discord user ID to fetch history for" }),
+      limit: Type.Optional(
+        Type.Number({ description: "Number of messages to fetch (default: 25, max: 100)" })
+      ),
+      before: Type.Optional(
+        Type.String({ description: "Fetch messages before this message ID (for pagination)" })
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (!(await ensureConnected(ctx.cwd))) {
+        throw new Error(
+          "Discord not connected. Ensure DISCORD_BOT_TOKEN and DISCORD_ALLOWED_USER_IDS are set."
+        );
+      }
+
+      if (!isAllowed(params.user_id)) {
+        throw new Error(`User ${params.user_id} is not in the allowed user list.`);
+      }
+
+      const user = await client!.users.fetch(params.user_id);
+      const dm = await user.createDM();
+
+      const limit = Math.min(params.limit ?? 25, 100);
+      const fetchOptions: { limit: number; before?: string } = { limit };
+      if (params.before) fetchOptions.before = params.before;
+
+      const messages = await dm.messages.fetch(fetchOptions);
+
+      // Sort chronologically (oldest first)
+      const sorted = [...messages.values()].reverse();
+
+      const formatted = sorted
+        .map((msg) => {
+          const author = msg.author.bot ? `[BOT] ${msg.author.tag}` : msg.author.tag;
+          const attachments =
+            msg.attachments.size > 0
+              ? ` [Attachments: ${msg.attachments.map((a) => `${a.name} (${a.url})`).join(", ")}]`
+              : "";
+          return `[${msg.createdAt.toISOString()}] (${msg.id}) ${author}: ${msg.content}${attachments}`;
+        })
+        .join("\n");
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: formatted || "No messages found.",
+          },
+        ],
+        details: { count: sorted.length, oldestId: sorted[0]?.id, newestId: sorted[sorted.length - 1]?.id },
       };
     },
   });

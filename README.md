@@ -49,7 +49,9 @@ export DISCORD_STRIP_TOOLS="true"
 | `discord_send_message` | Send a DM with text and/or file attachments |
 | `discord_send_embed` | Send a rich embed (with optional attachments) — supports title, fields, images, color, footer |
 | `discord_react` | React to a message with an emoji |
+| `discord_unreact` | Remove the bot's reaction from a message |
 | `discord_download_attachment` | Download a received attachment to a local file |
+| `discord_message_history` | Fetch recent DM history with a user (supports pagination) |
 | `discord_list_users` | List allowed users and their status |
 
 ## Commands
@@ -70,8 +72,14 @@ export DISCORD_STRIP_TOOLS="true"
 
 The extension connects to Discord on session start and listens for DMs from allowed users. When a DM arrives:
 
-1. The message is injected into the agent as a user prompt (via `sendUserMessage`)
-2. The agent processes it, potentially using tools, thinking, etc.
-3. On `agent_end`, the extension extracts **only the final assistant text** (no tool output, no thinking) and sends it back to the Discord DM automatically
+1. The bot shows a **typing indicator** in the DM channel
+2. The message is injected into the agent as a user prompt (via `sendUserMessage`)
+3. The agent processes it, potentially using tools, thinking, etc.
+4. On `agent_end`, the extension extracts **only the final assistant text** (no tool output, no thinking) and sends it back to the Discord DM automatically
+5. The typing indicator stops
 
 The Discord user sees only the clean final reply. All intermediate tool calls, reasoning, and internal state stay in pi.
+
+**Auto-reconnect:** If the Discord connection drops, the extension automatically attempts to reconnect after 5 seconds.
+
+**Message history:** The agent can fetch earlier DM messages via `discord_message_history` for conversation context beyond what's in the current pi session.
